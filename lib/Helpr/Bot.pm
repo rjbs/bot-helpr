@@ -28,7 +28,17 @@ has aim => (
   isa      => 'POE::Component::OSCAR',
   lazy     => 1,
   init_arg => undef,
-  default  => sub { POE::Component::OSCAR->new(throttle => 1) },
+  default  => sub {
+    POE::Component::OSCAR->new(
+      throttle     => 1,
+      capabilities => [ qw(buddy_icons) ],
+    )
+  },
+);
+
+has buddy_icon => (
+  is       => 'ro',
+  isa      => 'Str',
 );
 
 has date_parser => (
@@ -82,7 +92,28 @@ END_HELP
 }
 
 event signon_done => sub {
+  my ($self) = @_[OBJECT,];
+
   print "Signon done!\n";
+
+  if (my $ico = $self->buddy_icon) {
+    my $ok = eval {
+      open my $fh, '<', $ico or die "couldn't open icon file $ico: $!";
+
+      # we're limited to this size anyway
+      die "couldn't read from icon file: $!"
+        unless sysread $fh, my($icondata), 4096;
+
+      $self->aim->set_icon($icondata);
+      $self->aim->commit_buddylist;
+      1;
+    };
+
+    unless ($ok) {
+      warn "couldn't set buddy icon: $@";
+    }
+  }
+
 };
 
 my @commands;

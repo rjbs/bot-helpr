@@ -5,6 +5,6 @@ use warnings;
 use POE;
 use Helpr::Bot;
 
-Helpr::Bot->new;
+Helpr::Bot->new(buddy_icon => 'clank.jpg');
 
 $poe_kernel->run;
