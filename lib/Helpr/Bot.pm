@@ -31,14 +31,18 @@ has aim => (
   default  => sub { POE::Component::OSCAR->new(throttle => 1) },
 );
 
-my $date_parser;
 has date_parser => (
   is       => 'ro',
   isa      => 'DateTime::Format::Natural',
   lazy     => 1,
-  default  => sub {
-    $date_parser = DateTime::Format::Natural->new(prefer_future => 1)
-  }
+  default  => sub { DateTime::Format::Natural->new(prefer_future => 1) },
+);
+
+has location => (
+  is       => 'ro',
+  isa      => 'Str',
+  required => 1,
+  default  => '18018',
 );
 
 sub START {
@@ -84,48 +88,32 @@ event signon_done => sub {
 my @commands;
 BEGIN {
   @commands = (
-    qr/help/                  => sub { $HELP_TEXT },
-    qr/date/                  => sub { scalar localtime            },
-    qr/w(?:eather)?(?:\.)?/   => sub { weather(18018)              },
-    qr/w(?:eather)? (.+)/     => sub { weather($1)                 },
-    qr/=(.+)/                 => sub { calc($1)                    },
-    qr/convert (.+?) to (.+)/ => sub { calc("$1 in $2")            },
-    qr/change (.+?) to (.+)/  => sub { calc("$1 in $2")            },
-    qr/in ([^,]+?),\s*(.+)/   => sub { set_delay_dur($1, $2, $_[0])}, 
-    qr/at ([^,]+?),\s*(.+)/   => sub { set_delay_at($1, $2, $_[0]) }, 
-    qr/.*(?:fuck|shit).*/     => sub { 'Such language in a high-class establishment like this!' },
+    qr/help/                    => sub { $HELP_TEXT },
+    qr/date/                    => sub { __now()    },
+    qr/w(?:eather)?(?:\.)?/     => 'weather',
+    qr/w(?:eather)? (?<loc>.+)/ => 'weather',
+
+    qr/=(?<calc>.+)/                      => 'calc',
+    qr/convert (?<from>.+?) to (?<to>.+)/ => 'calc',
+    qr/change (?<from>.+?) to (?<to>.+)/  => 'calc',
+
+    qr/in (?<duration>[^,]+?),\s*(?<message>.+)/ => 'reminder_in',
+    qr/at (?<datetime>[^,]+?),\s*(?<message>.+)/ => 'reminder_at',
+
+    qr/.*(?:fuck|shit).*/
+      => sub { 'Such language in a high-class establishment like this!' },
   );
 }
 
-sub set_delay_dur {
-  my ($dur, $desc, $target) = @_;
-
-  my $secs = parse_duration($dur);
-  my $time = localtime time + $secs;
-
-  $poe_kernel->delay_add(reminder => $secs => $target, $desc, time);
-
-  return "Okay, at $time, I'll give you that reminder.";
-}
-
-sub set_delay_at {
-  my ($time_str, $desc, $target) = @_;
-
-  my $datetime = $date_parser->parse_datetime($time_str)
-    or die "couldn't parse datetime: " . $date_parser->error;
-
-  $poe_kernel->alarm_add(reminder => $datetime->epoch => $target, $desc, time);
-
-  my $time = localtime $datetime->epoch;
-  return "Okay, at $time, I'll give you that reminder.";
-}
-
 sub calc {
-  my $query  = shift;
+  my ($self, $arg) = @_;
+  my $query  = $arg->{query};
   my $result = WWW::Google::Calculator->new->calc($query);
 
   return $result || "no response for: $query";
 }
+
+sub __now { DateTime->now(time_zone => 'UTC') }
 
 sub __fc {
   my ($f) = @_;
@@ -133,8 +121,36 @@ sub __fc {
   sprintf '%s F (%s C)', $f, $c;
 }
 
+sub reminder_in {
+  my ($self, $arg) = @_;
+  my ($duration, $desc) = @$arg{qw(duration message)};
+
+  my $secs = parse_duration($duration);
+  my $time = localtime time + $secs;
+
+  $poe_kernel->delay_add(reminder => $secs => $arg->{WHO}, $desc, __now);
+
+  return "Okay, at $time, I'll give you that reminder.";
+}
+
+sub reminder_at {
+  my ($self, $arg) = @_;
+  my ($time_str, $desc) = @$arg{qw(datetime message)};
+
+  my $datetime = $self->date_parser->parse_datetime($time_str)
+    or die "couldn't parse datetime: " . $self->date_parser->error;
+
+  $poe_kernel->alarm_add(
+    reminder => $datetime->epoch => $arg->{WHO}, $desc, __now
+  );
+
+  my $time = localtime $datetime->epoch;
+  return "Okay, at $time, I'll give you that reminder.";
+}
+
 sub weather {
-  my ($loc) = @_;
+  my ($self, $arg) = @_;
+  my $loc = $arg->{loc} || $self->location;
   my $weather = Weather::Google->new($loc);
 
   return "I couldn't find the weather for that location."
@@ -177,7 +193,9 @@ event im_in => sub {
     my ($re, $cmd) = @commands[ $i, $i + 1 ];
 
     if ($what =~ /\A$re\z/i) {
-      my $reply = eval { $cmd->($who) };
+      my %arg = (%+, WHO => $who);
+
+      my $reply = eval { $self->$cmd(\%arg) };
       return print "error with <$what>: $@\n" unless $reply;
       $self->aim->send_im($who => $reply);
       return;
