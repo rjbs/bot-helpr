@@ -45,7 +45,12 @@ has date_parser => (
   is       => 'ro',
   isa      => 'DateTime::Format::Natural',
   lazy     => 1,
-  default  => sub { DateTime::Format::Natural->new(prefer_future => 1) },
+  default  => sub {
+    return DateTime::Format::Natural->new(
+      prefer_future => 1,
+      time_zone     => 'UTC',
+    );
+  },
 );
 
 has location => (
@@ -78,17 +83,20 @@ sub START {
 my $HELP_TEXT;
 BEGIN {
   $HELP_TEXT = <<'END_HELP';
-Hi.  I'm HELPR.
+Hi, I'm HELPR!
 
 I respond to the following:
- date
- w <location>
- =<math>
- change X to Y (change currency)
- convert X to Y (convert units)
- at DATE/TIME, REMINDER
- in DURATION, REMINDER
+  date
+  weather <location>
+  =<math>
+  change X to Y (change currency)
+  convert X to Y (convert units)
+  at DATE/TIME, REMINDER
+  in DURATION, REMINDER
 END_HELP
+
+  $HELP_TEXT =~ s{\n}{<br />}g;
+  $HELP_TEXT =~ s{(<br />)\s+}{$1&nbsp;&nbsp;}g;
 }
 
 event signon_done => sub {
@@ -120,7 +128,10 @@ my @commands;
 BEGIN {
   @commands = (
     qr/help/                    => sub { $HELP_TEXT },
+    qr/help .+/                 => sub { 'Sorry, no extended help yet!' },
+
     qr/date/                    => sub { __now()    },
+
     qr/w(?:eather)?(?:\.)?/     => 'weather',
     qr/w(?:eather)? (?<loc>.+)/ => 'weather',
 
@@ -138,7 +149,16 @@ BEGIN {
 
 sub calc {
   my ($self, $arg) = @_;
-  my $query  = $arg->{query};
+
+  my $query;
+  if ($arg->{calc}) {
+    $query = $arg->{calc};
+  } elsif ($arg->{from} and $arg->{to}) {
+    $query = "$arg->{from} in $arg->{to}";
+  } else {
+    die "didn't know how to perform calculation";
+  }
+
   my $result = WWW::Google::Calculator->new->calc($query);
 
   return $result || "no response for: $query";
@@ -156,8 +176,13 @@ sub reminder_in {
   my ($self, $arg) = @_;
   my ($duration, $desc) = @$arg{qw(duration message)};
 
-  my $secs = parse_duration($duration);
-  my $time = localtime time + $secs;
+  die "couldn't understand duration: $duration"
+    unless my $secs = parse_duration($duration);
+
+  my $time = DateTime->new(
+    epoch     => time + $secs,
+    time_zone => 'UTC',
+  );
 
   $poe_kernel->delay_add(reminder => $secs => $arg->{WHO}, $desc, __now);
 
@@ -175,8 +200,7 @@ sub reminder_at {
     reminder => $datetime->epoch => $arg->{WHO}, $desc, __now
   );
 
-  my $time = localtime $datetime->epoch;
-  return "Okay, at $time, I'll give you that reminder.";
+  return "Okay, at $datetime, I'll give you that reminder.";
 }
 
 sub weather {
@@ -204,7 +228,7 @@ sub weather {
 event reminder => sub {
   my ($self, $target, $text, $setup_time) = @_[OBJECT,ARG0,ARG1,ARG2];
 
-  my $message = "Here is the reminder you requested at $setup_time:\n$text";
+  my $message = "Reminder: $text<br />(requested at $setup_time)";
   $self->aim->send_im($target => $message);
 };
 
