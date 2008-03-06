@@ -128,7 +128,7 @@ my @commands;
 BEGIN {
   @commands = (
     qr/help/                    => sub { $HELP_TEXT },
-    qr/help .+/                 => sub { 'Sorry, no extended help yet!' },
+    qr/help\s+.+/               => sub { 'Sorry, no extended help yet!' },
 
     qr/date/                    => sub { __now()    },
 
@@ -179,7 +179,7 @@ sub reminder_in {
   die "couldn't understand duration: $duration"
     unless my $secs = parse_duration($duration);
 
-  my $time = DateTime->new(
+  my $time = DateTime->from_epoch(
     epoch     => time + $secs,
     time_zone => 'UTC',
   );
