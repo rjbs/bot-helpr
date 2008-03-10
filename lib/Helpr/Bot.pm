@@ -41,6 +41,11 @@ has buddy_icon => (
   isa      => 'Str',
 );
 
+has default_time_zone => (
+  is       => 'ro',
+  default  => 'America/New_York',
+);
+
 has date_parser => (
   is       => 'ro',
   isa      => 'DateTime::Format::Natural',
@@ -48,12 +53,12 @@ has date_parser => (
   default  => sub {
     return DateTime::Format::Natural->new(
       prefer_future => 1,
-      time_zone     => 'UTC',
+      time_zone     => $_[0]->default_time_zone,
     );
   },
 );
 
-has location => (
+has default_location => (
   is       => 'ro',
   isa      => 'Str',
   required => 1,
@@ -130,7 +135,7 @@ BEGIN {
     qr/help/                    => sub { $HELP_TEXT },
     qr/help\s+.+/               => sub { 'Sorry, no extended help yet!' },
 
-    qr/date/                    => sub { __now()    },
+    qr/date/                    => '__now',
 
     qr/w(?:eather)?(?:\.)?/     => 'weather',
     qr/w(?:eather)? (?<loc>.+)/ => 'weather',
@@ -164,7 +169,7 @@ sub calc {
   return $result || "no response for: $query";
 }
 
-sub __now { DateTime->now(time_zone => 'UTC') }
+sub __now { DateTime->now(time_zone => $_[0]->default_time_zone) }
 
 sub __fc {
   my ($f) = @_;
@@ -181,10 +186,10 @@ sub reminder_in {
 
   my $time = DateTime->from_epoch(
     epoch     => time + $secs,
-    time_zone => 'UTC',
+    time_zone => $self->default_time_zone,
   );
 
-  $poe_kernel->delay_add(reminder => $secs => $arg->{WHO}, $desc, __now);
+  $poe_kernel->delay_add(reminder => $secs => $arg->{WHO}, $desc, $self->__now);
 
   return "Okay, at $time, I'll give you that reminder.";
 }
@@ -197,7 +202,7 @@ sub reminder_at {
     or die "couldn't parse datetime: " . $self->date_parser->error;
 
   $poe_kernel->alarm_add(
-    reminder => $datetime->epoch => $arg->{WHO}, $desc, __now
+    reminder => $datetime->epoch => $arg->{WHO}, $desc, $self->__now
   );
 
   return "Okay, at $datetime, I'll give you that reminder.";
@@ -205,7 +210,7 @@ sub reminder_at {
 
 sub weather {
   my ($self, $arg) = @_;
-  my $loc = $arg->{loc} || $self->location;
+  my $loc = $arg->{loc} || $self->default_location;
   my $weather = Weather::Google->new($loc);
 
   return "I couldn't find the weather for that location."
