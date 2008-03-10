@@ -136,6 +136,8 @@ BEGIN {
     qr/help\s+.+/               => sub { 'Sorry, no extended help yet!' },
 
     qr/date/                    => '__now',
+    qr/time/                    => '__now',
+    qr/time in (?<loc>.+)/      => 'time_in',
 
     qr/w(?:eather)?(?:\.)?/     => 'weather',
     qr/w(?:eather)? (?<loc>.+)/ => 'weather',
@@ -230,6 +232,37 @@ sub weather {
   return $reply;
 }
 
+sub time_in {
+  my ($self, $arg) = @_;
+  my $loc = $arg->{loc};
+
+  require WWW::Mechanize;
+  require WWW::Mechanize::TreeBuilder;
+
+  my $mech = WWW::Mechanize->new;
+  my $url  = sprintf
+    'http://www.timeanddate.com/worldclock/results.html?query=%s',
+    $loc;
+
+  return "I couldn't find the local time for there, sorry."
+    unless $mech->get($url)->is_success;
+
+  return "I couldn't find the local time for there, sorry."
+    unless my $link = $mech->find_link(url_regex => qr/^city\.html\?n=/);
+
+  WWW::Mechanize::TreeBuilder->meta->apply($mech);
+  return "I couldn't find the local time for there, sorry."
+    unless $mech->get($link->url)->is_success;
+
+  my ($name) = $mech->look_down(class => 'biggest');
+  my ($time) = $mech->look_down(id    => 'ct');
+  my ($tz  ) = $mech->look_down(id    => 'cta');
+
+  return sprintf q{Right now in %s it's %s%s.},
+    (map { $_->as_text } $name, $time),
+    ($tz ? (' ' . $tz->as_text) : '');
+}
+  
 event reminder => sub {
   my ($self, $target, $text, $setup_time) = @_[OBJECT,ARG0,ARG1,ARG2];
 
