@@ -92,6 +92,8 @@ Hi, I'm HELPR!
 
 I respond to the following:
   date
+  time
+  time in <location>
   weather <location>
   =<math>
   change X to Y (change currency)
@@ -135,12 +137,11 @@ BEGIN {
     qr/help/                    => sub { $HELP_TEXT },
     qr/help\s+.+/               => sub { 'Sorry, no extended help yet!' },
 
-    qr/date/                    => '__now',
-    qr/time/                    => '__now',
-    qr/time in (?<loc>.+)/      => 'time_in',
-
     qr/w(?:eather)?(?:\.)?/     => 'weather',
     qr/w(?:eather)? (?<loc>.+)/ => 'weather',
+
+    qr/(?:time|date)/               => '__now',
+    qr/(?:time|date) in (?<loc>.+)/ => 'time_in',
 
     qr/=(?<calc>.+)/                      => 'calc',
     qr/convert (?<from>.+?) to (?<to>.+)/ => 'calc',
