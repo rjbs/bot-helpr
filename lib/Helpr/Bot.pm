@@ -13,14 +13,12 @@ has username => (
   is  => 'ro',
   isa => 'Str',
   required => 1,
-  default  => q{helpr@codesimply.com},
 );
 
 has password => (
   is  => 'ro',
   isa => 'Str',
   required => 1,
-  default  => ';2}EL2Nf2U6.&;4q',
 );
 
 has aim => (
