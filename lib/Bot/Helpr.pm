@@ -1,4 +1,4 @@
-package Helpr::Bot;
+package Bot::Helpr;
 use MooseX::POE;
 
 use DateTime;
@@ -107,7 +107,7 @@ END_HELP
 event signon_done => sub {
   my ($self) = @_[OBJECT,];
 
-  print "Signon done!\n";
+  warn "Signon done!\n";
 
   if (my $ico = $self->buddy_icon) {
     my $ok = eval {
@@ -279,7 +279,7 @@ event im_in => sub {
   $what =~ s{(?:^\s+|\s+$)}{}g;
   $what =~ s{\s{2,}}{ };
 
-  print "MESSAGE <$what> from <$who>\n";
+  warn "MESSAGE <$what> from <$who>\n";
   
   for (my $i = 0; $i < @commands; $i += 2) {
     my ($re, $cmd) = @commands[ $i, $i + 1 ];
@@ -288,13 +288,13 @@ event im_in => sub {
       my %arg = (%+, WHO => $who);
 
       my $reply = eval { $self->$cmd(\%arg) };
-      return print "error with <$what>: $@\n" unless $reply;
+      return warn "error with <$what>: $@\n" unless $reply;
       $self->aim->send_im($who => $reply);
       return;
     }
   }
 
-  print "Ignored msg from $who: $what\n";
+  $self->aim->send_im($who => "I didn't understand that.  Try <i>help.</i>");
 };
 
 1;
