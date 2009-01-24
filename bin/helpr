@@ -3,9 +3,9 @@ use strict;
 use warnings;
 
 use POE;
-use Helpr::Bot;
+use Bot::Helpr;
 
-Helpr::Bot->new({
+Bot::Helpr->new({
   ($ENV{HELPR_USERNAME} ? (username => $ENV{HELPR_USERNAME}) : ()),
   ($ENV{HELPR_PASSWORD} ? (password => $ENV{HELPR_PASSWORD}) : ()),
 });
